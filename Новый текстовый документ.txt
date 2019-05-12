@@ -1,0 +1,3 @@
+EHLO smtp.yandex.ru
+MAIL FROM: artem_pochta_314@mail.ru
+RCPT TO: artem3331114@gmail.com
