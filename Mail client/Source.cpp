@@ -21,10 +21,14 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include "afxres.h"
+#include "resource.h"
+
 #pragma comment(lib, "ssleay32.lib")
 #pragma comment(lib, "libeay32.lib")
 
 #pragma comment(lib, "ws2_32.lib")
+
+#define WM_ADDITEM  WM_USER+1
 
 #define ID_FROM 2001
 #define ID_TO 2002
@@ -34,6 +38,7 @@
 #define ID_FILE 2006
 #define ID_RECIPIENTS 2007
 #define ID_ADDRCPT 2008
+#define ID_FILES 2009
 
 #define STD_LNG 512
 
@@ -43,9 +48,11 @@ SSL_CTX *ctx;
 CRITICAL_SECTION c_section;
 
 TCHAR szBuffer[100] = TEXT("");
-
+BOOL selector = TRUE;
 char text[256];
 char Data[512];
+
+char szFile[256] = { 0 };
 
 char WarnText[256];
 char RecvBuf[512];
@@ -465,7 +472,7 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 	LONG width = rect.right - rect.left;
 	LONG height = rect.bottom - rect.top;
 
-	CreateWindowEx(0, TEXT("Edit"), NULL,
+	CreateWindowEx(0, TEXT("Edit"), TEXT("ПАПАША"),
 		WS_CHILD | WS_VISIBLE  |
 		ES_LEFT  |   WS_BORDER  , 10, 10, width - 40, 40, hwnd, (HMENU)ID_FROM, lpCreateStruct->hInstance, NULL);
 
@@ -480,6 +487,16 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 
 	ComboBox_AddString(cbmbx, "artem_pochta_314@mail.ru");
 	ComboBox_SetCurSel(cbmbx, 0);
+
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	recipients.push_back("artem_pochta_314@mail.ru");
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
+	// НЕ ЗАБЫТЬ УБРАТЬ
 
 	CreateWindowEx(0, TEXT("Button"), TEXT("Добавить"),
 		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 60, width /3	, 40,
@@ -498,8 +515,12 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 10, 370, width /2, 40,
 		hwnd, (HMENU)ID_SEND, lpCreateStruct->hInstance, NULL);
 
+	CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("Файлы"),
+		WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST, 10, 420, width / 2, 200,
+		hwnd, (HMENU)ID_FILES, lpCreateStruct->hInstance, NULL);
+
 	CreateWindowEx(0, TEXT("Button"), TEXT("ФАЙЛ"),
-		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 10, 420, width / 2, 40,
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 420, width / 3, 40,
 		hwnd, (HMENU)ID_FILE, lpCreateStruct->hInstance, NULL);
 
 	InitializeCriticalSection(&c_section);
@@ -545,6 +566,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	case WM_ADDITEM:
 	{
 		OnAddItem(hwnd, wParam);
+	}
+	return 0;
+
+
+	case WM_KEYDOWN:
+	{
+		if (wParam == VK_DELETE)
+		{
+			if (selector)
+			{
+				HWND hwndCtl = GetDlgItem(hwnd, ID_RECIPIENTS);
+				//  текущий выделенный элемент в списке
+				int iItem = ComboBox_GetCurSel(hwndCtl);
+				if (iItem != -1)
+				{
+					recipients.erase(recipients.begin() + iItem);
+					ComboBox_DeleteString(hwndCtl, iItem);
+				} // if
+			}
+			else
+			{
+				HWND hwndCtl = GetDlgItem(hwnd, ID_FILES);
+				int iItem = ComboBox_GetCurSel(hwndCtl);
+				if (iItem != -1)
+				{
+					files.erase(files.begin() + iItem);
+					ComboBox_DeleteString(hwndCtl, iItem);
+				} // if
+			}
+			
+			InvalidateRect(hwnd, NULL, TRUE);
+			UpdateWindow(hwnd);
+		}
 	}
 	return 0;
 
@@ -615,51 +669,85 @@ unsigned _stdcall SendMail(void *lpparameter)
 
 	char dlgtext[256];
 
-	GetDlgItemTextA(hwnd, ID_TO, dlgtext, _countof(dlgtext));
-	StringCchPrintfA(text, _countof(text), "RCPT TO: <%s>\r\n", dlgtext);
-	send_SSLsocket(ssl, text);
-	read_SSLsocket(ssl, false);
-	printf("%s\n", codeBuf);
+	for (size_t i = 0; i < recipients.size(); i++)
+	{
+		StringCchPrintfA(text, _countof(text), "RCPT TO: <%s>\r\n", recipients[i].c_str());
+		send_SSLsocket(ssl, text);
+		read_SSLsocket(ssl, false);
+		printf("%s\n", codeBuf);
+	}
 
 	send_SSLsocket(ssl, "DATA\r\n");
 	read_SSLsocket(ssl, false);
 	printf("%s\n", codeBuf);
 	
+	if (atoi(codeBuf) == 354)
+	{
+
+	}
 
 	//send_SSLsocket(ssl, "TO: artem_korshunov_2012@mail.com");
 
-	//std::string from1 = "RANDOM PAL";
-	//StringCchPrintfA(text, _countof(text), "FROM: %s <artem_@korshunov_2012@mail.ru>\r\n", from1.c_str());
-	//send_SSLsocket(ssl, text);
 
-
-	GetDlgItemTextA(hwnd, ID_SUBJECT, dlgtext, _countof(dlgtext));
-	StringCchPrintfA(text, _countof(text), "SUBJECT: %s\r\n", (LPSTR)dlgtext);
-	send_SSLsocket(ssl, text);
-	
-
-	HWND hwndctl = GetDlgItem(hwnd, ID_DATA);
+	HWND hwndctl = GetDlgItem(hwnd, ID_FROM);
 	int length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
 	LPSTR LpMessage = (LPSTR)malloc(length + 1);
+	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
+
+	GetDlgItemTextA(hwnd, ID_FROM, LpMessage, length+1);
+	std::string from1 = base64_encode(reinterpret_cast<const unsigned char*>(LpMessage), length+1);
+	StringCchPrintfA(text, _countof(text), "FROM:=?windows-1251?b?%s?=<artem_korshunov_2012@mail.com>\r\n", from1.c_str());
+	send_SSLsocket(ssl, text);
+
+	hwndctl = GetDlgItem(hwnd, ID_SUBJECT);
+	length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
+	LpMessage = (LPSTR)malloc(length + 1);
+	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
+
+	GetDlgItemTextA(hwnd, ID_SUBJECT, LpMessage, length + 1);
+	std::string subj = base64_encode(reinterpret_cast<const unsigned char*>(LpMessage), length + 1);
+	StringCchPrintfA(text, _countof(text), "SUBJECT:=?windows-1251?b?%s?=\r\n", subj.c_str());
+	send_SSLsocket(ssl, text);
+	
+	hwndctl = GetDlgItem(hwnd, ID_DATA);
+	length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
+	LpMessage = (LPSTR)malloc(length + 1);
 	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
 	
 	//memcpy(Data, &LpMessage, length);
 
 	//StringCchCatA(LpMessage, length, "\r\n");
-	send_SSLsocket(ssl, LpMessage); //ДЛЯ СООБЩЕНИЙ
-	
+
 	if (files.size() != 0)
 	{
+		std::string MIMEHEADER = "MIME-Version: 1.0\r\nContent-Type:multipart/mixed; boundary=frontier\r\n\r\n";
+		MIMEHEADER +="--frontier\r\nContent-Disposition: inline\r\nContent-Type:text/plain\r\r\n\r\n";
+		send_SSLsocket(ssl, MIMEHEADER.c_str());
+		send_SSLsocket(ssl, LpMessage); //ДЛЯ СООБЩЕНИЙ
+		
 		for (size_t i = 0; i < files.size(); i++)
 		{
-			//TO-DO ДОБАВИТЬ MIME
+			send_SSLsocket(ssl, "\r\n\r\n--frontier\r\n");
+			std::string MIMEFILE = "Content-Type:application/octet-stream\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename=";
+			MIMEFILE += files[i].fileName;
+			MIMEFILE += ";\r\n\r\n";
+			send_SSLsocket(ssl, MIMEFILE.c_str());
 			std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(files[i].fileContent), files[i].size.QuadPart);
 			send_SSLsocket(ssl, filetosend.c_str());
-			send_SSLsocket(ssl, "--frontier");
+			//send_SSLsocket(ssl, "\r\n--frontier");
 		}
 		//send_SSLsocket(ssl, "\n");
-		//send_SSLsocket(ssl, "--frontier--");
+		send_SSLsocket(ssl, "--frontier--");
 	}
+	else
+	{
+		std::string MIMEHEADER = "MIME-Version:1.0\r\nContent-Type:text/plain\r\nContent-Disposition:inline\r\n";
+
+		send_SSLsocket(ssl, MIMEHEADER.c_str());
+		send_SSLsocket(ssl, LpMessage); //ДЛЯ СООБЩЕНИЙ
+			
+	}
+		//send_SSLsocket(ssl, "\r\n--frontier");
 
 	send_SSLsocket(ssl, "\r\n.\r\n");
 	read_SSLsocket(ssl, false);
@@ -712,10 +800,16 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 		} // if
 		else
 		{
-			StringCchCopyA(file.fileName, _countof(file.fileName),(char*) filename);
+			StringCchCopyA(file.fileName, _countof(file.fileName),filename);
 			file.size = size;
 			EnterCriticalSection(&c_section);
 			files.push_back(file);
+
+			HWND hwndCtl = GetDlgItem(hwnd, ID_FILES);
+			// добавляем новый элемент в список
+			int iItem = ComboBox_AddItemData(hwndCtl, filename);
+			// выделяем новый элемент
+			ComboBox_SetCurSel(hwndCtl, iItem);
 			LeaveCriticalSection(&c_section);
 		}
 		
@@ -781,10 +875,40 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 
 	switch (id)
 	{
+
+	case ID_RECIPIENTS:
+	{
+		if (codeNotify == CBN_SELCHANGE)
+		{
+			SetFocus(hwnd);
+			selector = TRUE;
+		}
+	}
+	break;
+
+	case ID_FILES:
+	{
+		if (codeNotify == CBN_SELCHANGE)
+		{
+			SetFocus(hwnd);
+			selector = FALSE;
+		}
+	}
+	break;
+
 		case ID_SEND :
 		{
-			HANDLE sendThread = (HANDLE)_beginthreadex(NULL, 0, SendMail, NULL, 0, NULL);
-			CloseHandle(sendThread);
+			int a = recipients.size();
+			if (recipients.size() != 0)
+			{
+				HANDLE sendThread = (HANDLE)_beginthreadex(NULL, 0, SendMail, NULL, 0, NULL);
+				CloseHandle(sendThread);
+			}
+			else
+			{
+				MessageBox(NULL, TEXT("Необходимо добавить хотя бы одного получателя"), TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
+			}
+			
 		}
 		break;
 
@@ -793,8 +917,8 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			files.capacity();
 
 			OPENFILENAME ofn;       
-			char szFile[260] = { 0 };       
-
+	      
+			
 			// Initialize OPENFILENAME
 			ZeroMemory(&ofn, sizeof(ofn));
 			ofn.lStructSize = sizeof(ofn);
@@ -811,7 +935,7 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			if (GetOpenFileName(&ofn) != FALSE)
 			{
 				
-				HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync,(char *)(szFile), 0, NULL);
+				HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync,(void *)&szFile, 0, NULL);
 				//WaitForSingleObject(hp, INFINITE);
 				CloseHandle(hp);
 
@@ -851,7 +975,6 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			}
 		}
 		break;
-
 
 
 	}//switch
@@ -914,9 +1037,7 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify)
 		{
 			// получает дескриптор окна редактируемого поля
 			HWND hwndEdit = GetDlgItem(hWnd, IDC_EDIT1);
-
 			EDITBALLOONTIP ebt = { sizeof(EDITBALLOONTIP) };
-
 			ebt.pszTitle = L"Пусто";
 			ebt.pszText = L"Укажите название новой записи";
 			ebt.ttiIcon = TTI_WARNING;
@@ -957,6 +1078,7 @@ void OnAddItem(HWND hwnd, WPARAM wParam)
 	HWND hwndCtl = GetDlgItem(hwnd, ID_RECIPIENTS);
 	// добавляем новый элемент в список
 	int iItem = ComboBox_AddItemData(hwndCtl, szBuffer);
+	recipients.push_back(szBuffer);
 	// выделяем новый элемент
 	ComboBox_SetCurSel(hwndCtl, iItem);
 } // OnAddItem
@@ -973,7 +1095,6 @@ void OnAddItem(HWND hwnd, WPARAM wParam)
 //
 //для файлов
 //
-//MIME - Version: 1.0
 //Content - Type : application / octet - stream
 //Content - Transfer - Encoding : base64
 //Content - Disposition : attachment; filename = 1.jpeg;

@@ -14,6 +14,9 @@ Content-Type:application/octet-stream
 Content-Transfer-Encoding:base64
 Content-Disposition:attachment;filename=1.jpg;
 
+
+
+
 MIME-Version:1.0
 Content-Type:text/html
 Content-Disposition:inline
@@ -27,3 +30,35 @@ MIME-Version:1.0
 Content-Type:application/octet-stream
 Content-Transfer-Encoding:base64
 Content-Disposition:attachment;filename=1.jpeg;
+
+
+
+MIME-Version:1.0
+Content-Type:multipart/mixed;boundary=frontier
+
+--frontier
+Content-Disposition: inline
+Content-Type: text/plain
+TEXT adsadadadasdadasdadasd
+
+//правильный
+
+MIME-Version:1.0
+Content-Type:multipart/mixed;boundary=frontier
+
+--frontier
+Content-Disposition: inline
+Content-Type: text/plain
+
+TEXT adsadadadasdadasdadasd
+
+--frontier
+Content-Type:application/octet-stream
+Content-Transfer-Encoding:base64
+Content-Disposition:attachment;filename=1.jpg;
+--frontier--
+
+--frontier
+Content-Type:application/octet-stream
+Content-Transfer-Encoding:base64
+Content-Disposition:attachment;filename=1.jpg;
