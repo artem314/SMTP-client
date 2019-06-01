@@ -11,9 +11,8 @@
 #include <stdlib.h> 
 #include <process.h>
 #include <Commdlg.h>
-
+#include "shlwapi.h"
 #include <vector>
-
 #include <winsock2.h>
 #include <iostream>
 #include "psapi.h"
@@ -25,8 +24,11 @@
 
 #pragma comment(lib, "ssleay32.lib")
 #pragma comment(lib, "libeay32.lib")
-
+#pragma comment(lib,"Shlwapi.lib")
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment (lib, "comctl32")
+
+#pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define WM_ADDITEM  WM_USER+1
 
@@ -39,25 +41,23 @@
 #define ID_RECIPIENTS 2007
 #define ID_ADDRCPT 2008
 #define ID_FILES 2009
-
-#define STD_LNG 512
+#define IDC_STATIC 2010
 
 WSADATA ws;
 SSL_CTX *ctx;
 
 CRITICAL_SECTION c_section;
 
-TCHAR szBuffer[100] = TEXT("");
+TCHAR szNewReciverBuffer[256] = TEXT("");
 BOOL selector = TRUE;
-char text[256];
-char Data[512];
+char text[512];
 
-char szFile[256] = { 0 };
+char szFile[MAX_PATH] = { 0 };
 
 char WarnText[256];
-char RecvBuf[512];
-
 char codeBuf[4];
+
+constexpr char hostname[] = "smtp.gmail.com";
 
 std::string file;
 static const std::string base64_chars =
@@ -113,11 +113,6 @@ MSG msg;
 HWND hwnd = NULL;
 BOOL bRet;
 HWND hDlg = NULL;
-HWND hFindDlg = NULL;
-HACCEL hAccel = NULL;
-
-OVERLAPPED _oRead = { 0 }, _oWrite = { 0 };
-//char *lpszBufferText;
 
 struct FILEstruct {
 	char fileName[260];
@@ -129,8 +124,6 @@ std::vector<FILEstruct> files;
 std::vector<std::string> recipients;
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-void OnIdle(HWND hwnd);
-BOOL PreTranslateMessage(LPMSG lpMsg);
 BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct);
 void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify);
 
@@ -145,34 +138,28 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify);
 void OnAddItem(HWND hwnd, WPARAM wParam);
 
 int create_socket(int port, const char *hostname) {
-	int sockfd;
-	char *tmp_ptr = NULL;
+	int sockfd=0;
 	struct hostent *host;
 	struct sockaddr_in dest_addr;
 
 	if ((host = gethostbyname(hostname)) == NULL) 
 	{
-		MessageBox(NULL, TEXT("Не удалось обнаружить по доменному имени"), TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
-		//printf("Error: Cannot resolve hostname .\n");
+		MessageBox(NULL, TEXT("Cannot resolve hostname\n(Problem with Internet Connection)"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
-
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	dest_addr.sin_family = AF_INET;
 	dest_addr.sin_port = htons(port);
 	dest_addr.sin_addr.s_addr = *(long*)(host->h_addr);
 	memset(&(dest_addr.sin_zero), '\0', 8);
 
-	tmp_ptr = inet_ntoa(dest_addr.sin_addr);
-
 	if (connect(sockfd, (struct sockaddr *) &dest_addr,
 		sizeof(struct sockaddr)) == -1) 
 	{
-		StringCchPrintfA(WarnText, _countof(WarnText), "Не удалось присоединиться к хосту %s с портом %s", hostname, port);
-		MessageBox(NULL, WarnText, TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
-		//printf("Error: Cannot connect to host %s [%s] on port .\n", hostname, tmp_ptr, port);
+		StringCchPrintfA(WarnText, _countof(WarnText), "Cannot connect to host %s:%s", hostname, port);
+		MessageBox(NULL, WarnText, TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
+		return -1;
 	}
-
 	return sockfd;
 }
 int send_SSLsocket(SSL *ssl,const char *buf)
@@ -197,85 +184,19 @@ bool checkstr(const char *buf,int len)
 	{
 		for (size_t i = len - 3; i > 0; i--)
 		{
-			if (buf[i] == '\n')
+			if (isdigit(static_cast<unsigned char>(buf[i])) && (buf[i-3] == '\n' || i - 3== -1))
 			{
-				//isalpha()
-				char bufNumb[4];
-				memcpy(bufNumb, &buf[i+1], 3);
-				bufNumb[3] = '\0';
-				if (atoi(bufNumb) > 100 && buf[i + 4] == ' ' )
+				if (buf[i + 1] == ' ')
 					return true;
 			}
 		}
-
 		return false;
 	}
 	else
 		return false;
-
 }
 
-//void read_SSLsocket(SSL *ssl,bool multilineResponse)
-//{
-//	int size_recv, total_size = 0;
-//	char chunk[BUFSIZ];
-//	char recvbuf[BUFSIZ] = "";
-//	while (1)
-//	{
-//		memset(chunk, 0, BUFSIZ);  //clear the variable
-//		if (multilineResponse)
-//		{
-//			if (total_size >= 2)
-//			{
-//				if (recvbuf[total_size - 1] == '\n' && recvbuf[total_size - 2] == '\r'
-//					&&	checkstr(recvbuf, total_size))
-//				{
-//					break;
-//				}
-//			}
-//			else 
-//			{
-//				if ((size_recv = SSL_read(ssl, chunk, BUFSIZ - total_size)) < 0)
-//				{
-//					break;
-//				}
-//				else if (size_recv == 0) break;
-//				else
-//				{
-//					total_size += size_recv;
-//					StringCchCatA(recvbuf, BUFSIZ, chunk);
-//				}
-//			}
-//		}
-//		else
-//		{
-//			if (total_size >= 2)
-//			{
-//				if (recvbuf[total_size - 1] == '\n'&& recvbuf[total_size - 2] == '\r')
-//					break;
-//			}
-//			else
-//			{
-//				if ((size_recv = SSL_read(ssl, chunk, BUFSIZ - total_size)) < 0)
-//				{
-//					break;
-//				}
-//				else if (size_recv == 0)
-//					break;
-//				else
-//				{
-//					total_size += size_recv;
-//					StringCchCatA(recvbuf, BUFSIZ, chunk);
-//				}
-//			}
-//		}
-//	}
-//
-//	memcpy(codeBuf, recvbuf, 3);
-//	codeBuf[3] = '\0';
-//}
-
-void read_SSLsocket(SSL *ssl, bool multilineResponse)
+void read_SSLsocket(SSL *ssl)
 {
 	char ptr[BUFSIZ];
 	int read_bytes = 0;
@@ -284,23 +205,11 @@ void read_SSLsocket(SSL *ssl, bool multilineResponse)
 	{
 		if (read_bytes >= 3)
 		{
-			if (multilineResponse)
-			{
-				if (checkstr(ptr, read_bytes))
-					break;
-				else
-				{
-					r = SSL_read(ssl, ptr + read_bytes, BUFSIZ - read_bytes);
-					if (r <= 0)
-						break;
-				}
-			}
+			if (checkstr(ptr, read_bytes))
+				break;
 			else
 			{
-				if (ptr[read_bytes - 1] == '\n'&& ptr[read_bytes - 2] == '\r')
-					break;
-				else
-					r = SSL_read(ssl, ptr + read_bytes, BUFSIZ - read_bytes);
+				r = SSL_read(ssl, ptr + read_bytes, BUFSIZ - read_bytes);
 				if (r <= 0)
 					break;
 			}
@@ -311,7 +220,6 @@ void read_SSLsocket(SSL *ssl, bool multilineResponse)
 			if (r <= 0)
 				break;
 		}
-
 		read_bytes += r;
 	}
 
@@ -323,7 +231,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 {
 	if (WSAStartup(0x101, &ws) || ws.wVersion != 0x101)
 	{
-		MessageBox(NULL, TEXT("Ошибка инициализации библиотеки WinSock"), NULL, MB_OK | MB_ICONERROR);
+		MessageBox(NULL, TEXT("WinSock Lib initialization failed"), NULL, MB_OK | MB_ICONERROR);
 		return -1;
 	}
 	
@@ -345,22 +253,22 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 
 	if (0 == RegisterClassEx(&wcex)) // регистрирует класс
 	{
-		MessageBox(NULL, TEXT("Не удалось зарегестрировать класс!"), TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
+		MessageBox(NULL, TEXT("The window class failed to register!"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
 
 	LoadLibrary(TEXT("ComCtl32.dll"));
 
 	hwnd = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("Windowslass"), TEXT("MAIL"), WS_OVERLAPPEDWINDOW,
-		400, 100, 600, 550, NULL, NULL, hInstance, NULL);
+		400, 100, 600, 650, NULL, NULL, hInstance, NULL);
 
 	if (NULL == hwnd)
 	{
-		MessageBox(NULL, TEXT("Не удалось создать окно!"), TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
+		MessageBox(NULL, TEXT("Problem creating the window"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
 
-	//инициализация SSL
+	//SSL init
 	OpenSSL_add_all_algorithms();
 
 	ERR_load_crypto_strings();
@@ -368,7 +276,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 
 	if (SSL_library_init() < 0)
 	{
-		printf("Could not initialize the OpenSSL library !\n");
+		MessageBox(NULL, TEXT("Could not initialize the OpenSSL library"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
 		
@@ -376,19 +284,15 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 
 	if ((ctx = SSL_CTX_new(method)) == NULL)
 	{
-		printf("Unable to create a new SSL context structure.\n");
+		MessageBox(NULL, TEXT("Unable to create a new SSL context structure"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
-	//инициализация SSL
+	//SSL init
 
 	ShowWindow(hwnd, nCmdShow);
 
 	for (;;)
 	{
-		//while (!PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE))
-		//{
-		//	OnIdle(hwnd);
-		//} // while
 		bRet = GetMessage(&msg, NULL, 0, 0);
 
 		if (bRet == -1)
@@ -409,62 +313,6 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 	return (int)msg.wParam;
 }
 
-BOOL TryFinishIo(LPOVERLAPPED lpOverlapped)
-{
-	if (NULL != lpOverlapped->hEvent)
-	{
-		// определяем состояние операции ввода/вывода
-		DWORD dwResult = WaitForSingleObject(lpOverlapped->hEvent, 0);
-
-		if (WAIT_OBJECT_0 == dwResult) // операция завершена
-		{
-			CloseHandle(lpOverlapped->hEvent), lpOverlapped->hEvent = NULL;
-			return TRUE;
-		} // if
-	} // if
-
-	return FALSE;
-} // TryFinishIo
-
-//void OnIdle(HWND hwnd)
-//{
-//	if (NULL != lpszBufferText)
-//	{
-//		if (TryFinishIo(&_oRead) != FALSE) // асинхронное чтение данных из файла завершено
-//		{
-//			if (ERROR_SUCCESS == _oRead.Internal) // чтение завершено успешно
-//			{
-//				FILEstruct filesnd = { 0 };
-//				filesnd.fileContent = new char[_oRead.InternalHigh];
-//				filesnd.size.QuadPart = _oRead.InternalHigh;
-//				memcpy(filesnd.fileContent, lpszBufferText, _oRead.InternalHigh);
-//				files.push_back(filesnd);
-//				
-//				MessageBox(hwnd, "ЗАГРУЖЕНО", "", MB_ICONEXCLAMATION | MB_OK);
-//			} // if
-//
-//			// освобождаем выделенную память
-//			delete[] lpszBufferText, lpszBufferText = NULL;
-//		} // if
-//		
-//	} // if
-//} // OnIdle
-
-BOOL PreTranslateMessage(LPMSG lpMsg)
-{
-	BOOL bRet = TRUE;
-
-	if (!TranslateAccelerator(hwnd, hAccel, lpMsg))
-	{
-		bRet = IsDialogMessage(hDlg, lpMsg);
-
-		if (FALSE == bRet)
-			bRet = IsDialogMessage(hFindDlg, lpMsg);
-	}
-
-	return bRet;
-}
-
 BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 {
 	RECT rect = { 0 };
@@ -472,55 +320,48 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 	LONG width = rect.right - rect.left;
 	LONG height = rect.bottom - rect.top;
 
-	CreateWindowEx(0, TEXT("Edit"), TEXT("ПАПАША"),
+	CreateWindowEx(0, TEXT("Static"), TEXT("FROM:"),
+		WS_CHILD | WS_VISIBLE, 10, 10, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
+
+	CreateWindowEx(0, TEXT("Edit"), TEXT("Sender"),
 		WS_CHILD | WS_VISIBLE  |
-		ES_LEFT  |   WS_BORDER  , 10, 10, width - 40, 40, hwnd, (HMENU)ID_FROM, lpCreateStruct->hInstance, NULL);
+		ES_LEFT  |   WS_BORDER  , 20, 40, width - 70, 30, hwnd, (HMENU)ID_FROM, lpCreateStruct->hInstance, NULL);
 
-	//CreateWindowEx(0, TEXT("Edit"), TEXT("artem_pochta_314@mail.ru"),
-	//	WS_CHILD | WS_VISIBLE |  
-	//	ES_LEFT  | WS_BORDER, 10, 60, width - 40, 40, hwnd, (HMENU)ID_TO, lpCreateStruct->hInstance, NULL);
+	CreateWindowEx(0, TEXT("Static"), TEXT("TO:"),
+		WS_CHILD | WS_VISIBLE, 10, 80, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
 
-
-	HWND cbmbx = CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("Получатели"),
-		WS_CHILD | WS_VISIBLE  | WS_VSCROLL | CBS_DROPDOWNLIST , 10, 60, width /2 , 200,
+	HWND cbmbx = CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("RECIPIENTS"),
+		WS_CHILD | WS_VISIBLE  | WS_VSCROLL | CBS_DROPDOWNLIST , 20, 110, width /2 , 200,
 		hwnd, (HMENU)ID_RECIPIENTS, lpCreateStruct->hInstance, NULL);
 
-	ComboBox_AddString(cbmbx, "artem_pochta_314@mail.ru");
-	ComboBox_SetCurSel(cbmbx, 0);
-
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	recipients.push_back("artem_pochta_314@mail.ru");
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-	// НЕ ЗАБЫТЬ УБРАТЬ
-
-	CreateWindowEx(0, TEXT("Button"), TEXT("Добавить"),
-		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 60, width /3	, 40,
+	CreateWindowEx(0, TEXT("Button"), TEXT("Add Recipient"),
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 110, width /3, 30,
 		hwnd, (HMENU)ID_ADDRCPT, lpCreateStruct->hInstance, NULL);
-
-	CreateWindowEx(0, TEXT("Edit"), TEXT("Subject по русски"),
-		WS_CHILD | WS_VISIBLE |  
-		ES_LEFT  | WS_BORDER, 10, 110, width - 40, 40, hwnd, (HMENU)ID_SUBJECT, lpCreateStruct->hInstance, NULL);
-
-	CreateWindowEx(0, TEXT("Edit"), TEXT("TEXT по русски"),
-		WS_CHILD | WS_VISIBLE | WS_VSCROLL |
-		ES_LEFT  | ES_MULTILINE | ES_AUTOVSCROLL | WS_BORDER, 10, 160, width - 40, 200, hwnd, (HMENU)ID_DATA, lpCreateStruct->hInstance, NULL);
-
 	
-	CreateWindowEx(0, TEXT("Button"), TEXT("Отправить"),
-		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 10, 370, width /2, 40,
+	CreateWindowEx(0, TEXT("Static"), TEXT("SUBJECT:"),
+		WS_CHILD | WS_VISIBLE, 10, 150, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
+
+	CreateWindowEx(0, TEXT("Edit"), TEXT("Subject"),
+		WS_CHILD | WS_VISIBLE |  
+		ES_LEFT  | WS_BORDER, 20, 180, width - 70, 30, hwnd, (HMENU)ID_SUBJECT, lpCreateStruct->hInstance, NULL);
+
+	CreateWindowEx(0, TEXT("Edit"), TEXT("Text...\r\n\r\n\r\n\r\nSent From Mail Client"),
+		WS_CHILD | WS_VISIBLE | WS_VSCROLL |
+		ES_LEFT  | ES_MULTILINE | ES_AUTOVSCROLL | WS_BORDER, 20, 220, width - 40, 200, hwnd, (HMENU)ID_DATA, lpCreateStruct->hInstance, NULL);
+
+	CreateWindowEx(0, TEXT("Button"), TEXT("Send"),
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 440, width / 2, 40,
 		hwnd, (HMENU)ID_SEND, lpCreateStruct->hInstance, NULL);
 
-	CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("Файлы"),
-		WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST, 10, 420, width / 2, 200,
+	CreateWindowEx(0, TEXT("Static"), TEXT("Insert Files:"),
+		WS_CHILD | WS_VISIBLE, 10, 490, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
+
+	CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("FILES"),
+		WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST, 20, 520, width / 2, 200,
 		hwnd, (HMENU)ID_FILES, lpCreateStruct->hInstance, NULL);
 
-	CreateWindowEx(0, TEXT("Button"), TEXT("ФАЙЛ"),
-		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 420, width / 3, 40,
+	CreateWindowEx(0, TEXT("Button"), TEXT("Add File"),
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 520, width / 3, 30,
 		hwnd, (HMENU)ID_FILE, lpCreateStruct->hInstance, NULL);
 
 	InitializeCriticalSection(&c_section);
@@ -532,7 +373,6 @@ void DrawWindow()
 {
 
 }
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
@@ -553,6 +393,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				delete[] files[i].fileContent;
 		}
 
+		SSL_CTX_free(ctx);
 		DeleteCriticalSection(&c_section);
 		PostQuitMessage(0);
 	}
@@ -577,12 +418,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			if (selector)
 			{
 				HWND hwndCtl = GetDlgItem(hwnd, ID_RECIPIENTS);
-				//  текущий выделенный элемент в списке
 				int iItem = ComboBox_GetCurSel(hwndCtl);
 				if (iItem != -1)
 				{
 					recipients.erase(recipients.begin() + iItem);
 					ComboBox_DeleteString(hwndCtl, iItem);
+					if (recipients.size()!=0)
+					{
+						ComboBox_SetCurSel(hwndCtl, recipients.size()-1);
+					}
 				} // if
 			}
 			else
@@ -591,8 +435,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				int iItem = ComboBox_GetCurSel(hwndCtl);
 				if (iItem != -1)
 				{
+					if(files[iItem].fileContent!=NULL)
+					delete[] files[iItem].fileContent;
 					files.erase(files.begin() + iItem);
 					ComboBox_DeleteString(hwndCtl, iItem);
+					if (files.size() != 0)
+					{
+						ComboBox_SetCurSel(hwndCtl, files.size() - 1);
+					}
 				} // if
 			}
 			
@@ -607,49 +457,59 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+std::string EncodeField(HWND hwndctl, const std::string &param)
+{
+	int length = SendMessageW(hwndctl, WM_GETTEXTLENGTH, 0, 0);
+	std::wstring message;
+	message.resize(length + 1);
+	SendMessageW(hwndctl, WM_GETTEXT, message.length(), (LPARAM)message.c_str());
+
+	length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), nullptr, 0, nullptr, nullptr);
+
+	std::string texto;
+	texto.resize(length + 1);
+	
+	length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), &texto[0], texto.length(), nullptr, nullptr);
+	texto.resize(length + 1);
+
+	return "%s:=?UTF-8?b?" + base64_encode(reinterpret_cast<const unsigned char*>(texto.c_str()), texto.length()) + "?=";
+
+	//std::string Field = base64_encode(reinterpret_cast<const unsigned char*>(textto), length + 1);
+	//StringCchPrintfA(text, _countof(text), "%s:=?UTF-8?b?%s?=\r\n", param.c_str(), Field.c_str());
+}
+
 unsigned _stdcall SendMail(void *lpparameter)
 {
-
 	SSL *ssl; 
 	ssl = SSL_new(ctx);
 
-	constexpr char hostname[] = "smtp.gmail.com";
 	int sock = create_socket(465, hostname);
-	if (sock == FALSE)
+	if (sock == -1)
 	{
 		return -1;
-		printf("Не удалось подключиться к серверу to:%s\n", hostname);
 	}
-	else
-		
-		
+
 	SSL_set_fd(ssl, sock);
 
 	if (SSL_connect(ssl) != 1)
 	{
-		printf("Error: Could not build a SSL session to:%s\n", hostname);
+		MessageBox(NULL, "Could not build a SSL session", "Error", MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
-		
+
+	read_SSLsocket(ssl);
 	send_SSLsocket(ssl,"EHLO smtpclient\r\n");
-	read_SSLsocket(ssl,true);
-	printf("%s\n", codeBuf);
-	printf("ehlo---------------------------------\n");
+	read_SSLsocket(ssl);
 
 	send_SSLsocket(ssl, "AUTH LOGIN\r\n");
-	read_SSLsocket(ssl,false);
-	printf("%s\n", codeBuf);
+	read_SSLsocket(ssl);
 
 	std::string login64 = "artem3331114@gmail.com";
-
-	//std::string login64 = "artem_korshunov_2012@mail.ru";
 
 	login64 = base64_encode(reinterpret_cast<const unsigned char*>(login64.c_str()), login64.length());
 	login64 = login64 + "\r\n";
 	send_SSLsocket(ssl, login64.c_str());
-	read_SSLsocket(ssl, false);
-	printf("%s\n", codeBuf);
-
+	read_SSLsocket(ssl);
 
 	std::string pass64 = "smjgzicjouudmlka";
 
@@ -657,116 +517,101 @@ unsigned _stdcall SendMail(void *lpparameter)
 	pass64 = pass64 + "\r\n";
 
 	send_SSLsocket(ssl, pass64.c_str());
-	read_SSLsocket(ssl, false);
-	printf("%s\n", codeBuf);
+	read_SSLsocket(ssl);
 
-	std::string from = "artem_korshunov_2012@mail.com";
+	std::string from = "artem_pochta_314@mail.ru";
 	from = base64_encode(reinterpret_cast<const unsigned char*>(from.c_str()), from.length());
 	from = "MAIL FROM: <" + from + ">\r\n";
 	send_SSLsocket(ssl, from.c_str());
-	read_SSLsocket(ssl, false);
-	printf("%s\n", codeBuf);
+	read_SSLsocket(ssl);
 
-	char dlgtext[256];
-
+	int wrongRcpt = 0;
 	for (size_t i = 0; i < recipients.size(); i++)
 	{
 		StringCchPrintfA(text, _countof(text), "RCPT TO: <%s>\r\n", recipients[i].c_str());
 		send_SSLsocket(ssl, text);
-		read_SSLsocket(ssl, false);
-		printf("%s\n", codeBuf);
+		read_SSLsocket(ssl);
+
+		if (strcmp(codeBuf, "553")==0)
+		{
+			wrongRcpt++;
+			StringCchPrintfA(text, _countof(text), "Wrong email address: %s", recipients[i].c_str());
+			MessageBox(NULL, text, "RCPT Error", MB_ICONEXCLAMATION | MB_OK);
+			
+			if (recipients.size() == wrongRcpt)
+			{
+				send_SSLsocket(ssl, "QUIT\r\n");
+				return -1;
+			}
+		}
 	}
 
 	send_SSLsocket(ssl, "DATA\r\n");
-	read_SSLsocket(ssl, false);
-	printf("%s\n", codeBuf);
+	read_SSLsocket(ssl);
 	
-	if (atoi(codeBuf) == 354)
+	if (strcmp(codeBuf,"354") == 0)
 	{
+		HWND hwndctl = GetDlgItem(hwnd, ID_FROM);
+		EncodeField(hwndctl, "FROM");
+		send_SSLsocket(ssl, text);
 
-	}
+		hwndctl = GetDlgItem(hwnd, ID_SUBJECT);
+		EncodeField(hwndctl, "SUBJECT");
+		send_SSLsocket(ssl, text);
 
-	//send_SSLsocket(ssl, "TO: artem_korshunov_2012@mail.com");
+		int length = 0;
+		LPSTR LpMessage ;
 
+		hwndctl = GetDlgItem(hwnd, ID_DATA);
+		length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
+		LpMessage = (LPSTR)malloc(length + 1);
+		SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
 
-	HWND hwndctl = GetDlgItem(hwnd, ID_FROM);
-	int length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
-	LPSTR LpMessage = (LPSTR)malloc(length + 1);
-	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
-
-	GetDlgItemTextA(hwnd, ID_FROM, LpMessage, length+1);
-	std::string from1 = base64_encode(reinterpret_cast<const unsigned char*>(LpMessage), length+1);
-	StringCchPrintfA(text, _countof(text), "FROM:=?windows-1251?b?%s?=<artem_korshunov_2012@mail.com>\r\n", from1.c_str());
-	send_SSLsocket(ssl, text);
-
-	hwndctl = GetDlgItem(hwnd, ID_SUBJECT);
-	length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
-	LpMessage = (LPSTR)malloc(length + 1);
-	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
-
-	GetDlgItemTextA(hwnd, ID_SUBJECT, LpMessage, length + 1);
-	std::string subj = base64_encode(reinterpret_cast<const unsigned char*>(LpMessage), length + 1);
-	StringCchPrintfA(text, _countof(text), "SUBJECT:=?windows-1251?b?%s?=\r\n", subj.c_str());
-	send_SSLsocket(ssl, text);
-	
-	hwndctl = GetDlgItem(hwnd, ID_DATA);
-	length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
-	LpMessage = (LPSTR)malloc(length + 1);
-	SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
-	
-	//memcpy(Data, &LpMessage, length);
-
-	//StringCchCatA(LpMessage, length, "\r\n");
-
-	if (files.size() != 0)
-	{
-		std::string MIMEHEADER = "MIME-Version: 1.0\r\nContent-Type:multipart/mixed; boundary=frontier\r\n\r\n";
-		MIMEHEADER +="--frontier\r\nContent-Disposition: inline\r\nContent-Type:text/plain\r\r\n\r\n";
-		send_SSLsocket(ssl, MIMEHEADER.c_str());
-		send_SSLsocket(ssl, LpMessage); //ДЛЯ СООБЩЕНИЙ
-		
-		for (size_t i = 0; i < files.size(); i++)
+		if (files.size() != 0)
 		{
-			send_SSLsocket(ssl, "\r\n\r\n--frontier\r\n");
-			std::string MIMEFILE = "Content-Type:application/octet-stream\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename=";
-			MIMEFILE += files[i].fileName;
-			MIMEFILE += ";\r\n\r\n";
-			send_SSLsocket(ssl, MIMEFILE.c_str());
-			std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(files[i].fileContent), files[i].size.QuadPart);
-			send_SSLsocket(ssl, filetosend.c_str());
-			//send_SSLsocket(ssl, "\r\n--frontier");
+			std::string MIMEHEADER = "MIME-Version: 1.0\r\nContent-Type:multipart/mixed;boundary=frontier\r\n\r\n";
+			MIMEHEADER += "--frontier\r\nContent-Disposition:inline\r\nContent-Type:text/plain\r\r\n\r\n";
+			send_SSLsocket(ssl, MIMEHEADER.c_str());
+			send_SSLsocket(ssl, LpMessage); 
+
+			for (size_t i = 0; i < files.size(); i++)
+			{
+				send_SSLsocket(ssl, "\r\n\r\n--frontier\r\n");
+				std::string MIMEFILE = "Content-Type:application/octet-stream;\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename=";
+				MIMEFILE += files[i].fileName; 
+				MIMEFILE += ";\r\n\r\n";
+				send_SSLsocket(ssl, MIMEFILE.c_str());
+				std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(files[i].fileContent), files[i].size.QuadPart);
+				send_SSLsocket(ssl, filetosend.c_str());
+			}
+			send_SSLsocket(ssl, "\r\n--frontier--");
 		}
-		//send_SSLsocket(ssl, "\n");
-		send_SSLsocket(ssl, "--frontier--");
+		else
+		{
+			std::string MIMEHEADER = "MIME-Version:1.0\r\nContent-Type:text/plain\r\nContent-Disposition:inline\r\n";
+			send_SSLsocket(ssl, MIMEHEADER.c_str());
+			send_SSLsocket(ssl, LpMessage); 
+		}
+
+		send_SSLsocket(ssl, "\r\n.\r\n");
+		read_SSLsocket(ssl);
+		if (strcmp(codeBuf, "250") == 0)
+		{
+			MessageBox(NULL, "EMail successfuly send", "Success", MB_ICONINFORMATION | MB_OK);
+		}
+		else
+			MessageBox(NULL, "Failure", "Error", MB_ICONEXCLAMATION | MB_OK);
+
+	//send_SSLsocket(ssl, "QUIT\r\n");
 	}
 	else
 	{
-		std::string MIMEHEADER = "MIME-Version:1.0\r\nContent-Type:text/plain\r\nContent-Disposition:inline\r\n";
-
-		send_SSLsocket(ssl, MIMEHEADER.c_str());
-		send_SSLsocket(ssl, LpMessage); //ДЛЯ СООБЩЕНИЙ
-			
+		send_SSLsocket(ssl, "QUIT\r\n");
+		MessageBox(NULL, "Failure", "Error", MB_ICONEXCLAMATION | MB_OK);
 	}
-		//send_SSLsocket(ssl, "\r\n--frontier");
-
-	send_SSLsocket(ssl, "\r\n.\r\n");
-	read_SSLsocket(ssl, false);
-	
-	MessageBox(NULL, codeBuf, "", MB_ICONEXCLAMATION | MB_OK);
-
-	int ret = strcmp(codeBuf, "250");
-	if (ret == 0)
-	{
-		MessageBox(NULL, "ОТПРАВЛЕНО", "", MB_ICONEXCLAMATION | MB_OK);
-	}
-	else 
-		MessageBox(NULL, "ОШИБКА ОТПРАВКИ", "", MB_ICONEXCLAMATION | MB_OK);
-
-	send_SSLsocket(ssl, "QUIT");
 
 	closesocket(sock);
-	SSL_shutdown(ssl);
-
+	SSL_shutdown(ssl);	
 	return 0;
 }
 
@@ -776,9 +621,9 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 
 	FILEstruct file = { 0 };
 
-	HANDLE hExistingFile = CreateFile((char*)filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE hExistingFile = CreateFile((char*)filename, GENERIC_READ, FILE_SHARE_READ| FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
 
-	if (INVALID_HANDLE_VALUE == hExistingFile) // не удалось открыть файл
+	if (INVALID_HANDLE_VALUE == hExistingFile) 
 	{
 		return FALSE;
 	} // if
@@ -789,106 +634,65 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 	if ((FALSE != bRet) && (size.LowPart > 0))
 	{
 		file.fileContent = new char[size.QuadPart];
-
-		// начинаем асинхронное чтение данных из файла
 		bRet = ReadFile(hExistingFile, file.fileContent, size.QuadPart, NULL, NULL);
 
-		if (FALSE == bRet) // возникла ошибка
+		if (FALSE == bRet)
 		{
-			// освобождаем выделенную память
 			delete[] file.fileContent;
 		} // if
 		else
 		{
-			StringCchCopyA(file.fileName, _countof(file.fileName),filename);
+
+			ULARGE_INTEGER u_size = { 0 };
+
+			for (size_t i = 0; i < files.size(); i++)
+			{
+				u_size.QuadPart += files[i].size.QuadPart;
+			}
+
+			if (u_size.QuadPart + size.QuadPart >= 0x2000000ULL)
+			{
+				MessageBox(NULL, TEXT("Files size too large\ntotal file size should be less than 20 Mb"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
+				return 0;
+			}
+
+			PathStripPath(filename);
+			StringCchCopyA(file.fileName, _countof(file.fileName), filename);
 			file.size = size;
 			EnterCriticalSection(&c_section);
 			files.push_back(file);
 
 			HWND hwndCtl = GetDlgItem(hwnd, ID_FILES);
-			// добавляем новый элемент в список
 			int iItem = ComboBox_AddItemData(hwndCtl, filename);
-			// выделяем новый элемент
 			ComboBox_SetCurSel(hwndCtl, iItem);
 			LeaveCriticalSection(&c_section);
 		}
 		
 	} // if
 
+	CloseHandle(hExistingFile);
 	return 0;
 }
 
-BOOL ReadAsync(HANDLE hFile, char *lpBuffer, DWORD dwOffset, DWORD dwSize, LPOVERLAPPED lpOverlapped)
-{
-	ZeroMemory(lpOverlapped, sizeof(OVERLAPPED));
-
-	lpOverlapped->Offset = dwOffset;
-	lpOverlapped->hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-	// начинаем асинхронную операцию чтения данных из файла
-	BOOL bRet = ReadFile(hFile, lpBuffer, dwSize, NULL, lpOverlapped);
-
-	if (FALSE == bRet && ERROR_IO_PENDING != GetLastError())
-	{
-		CloseHandle(lpOverlapped->hEvent), lpOverlapped->hEvent = NULL;
-		return FALSE;
-	} // if
-
-	return TRUE;
-} // ReadAsync
-
-//BOOL OpenFileAsync(const char *szFileName)
-//{
-//	// открываем существующий файл для чтения и записи
-//	HANDLE hExistingFile = CreateFile(szFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-//
-//	if (INVALID_HANDLE_VALUE == hExistingFile) // не удалось открыть файл
-//	{
-//		return FALSE;
-//	} // if
-//
-//	HANDLE hFile = hExistingFile;
-//	// определяем размер файла 
-//	LARGE_INTEGER size;
-//	BOOL bRet = GetFileSizeEx(hFile, &size);
-//
-//	if ((FALSE != bRet) && (size.LowPart > 0))
-//	{
-//		// выделяем память для буфера, в который будет считываться данные из файла
-//		lpszBufferText = new char[size.QuadPart];
-//
-//		// начинаем асинхронное чтение данных из файла
-//		bRet = ReadAsync(hFile, lpszBufferText, 0, size.LowPart, &_oRead);
-//
-//		if (FALSE == bRet) // возникла ошибка
-//		{
-//			// освобождаем выделенную память
-//			delete[] lpszBufferText, lpszBufferText = NULL;
-//		} // if
-//	} // if
-//
-//	return bRet;
-//} // OpenFileAsync
-
 void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 {
-
 	switch (id)
 	{
 
 	case ID_RECIPIENTS:
 	{
-		if (codeNotify == CBN_SELCHANGE)
+		if (codeNotify == CBN_SELCHANGE || codeNotify == CBN_DROPDOWN)
 		{
 			SetFocus(hwnd);
 			selector = TRUE;
 		}
+		
 	}
 	break;
 
 	case ID_FILES:
 	{
-		if (codeNotify == CBN_SELCHANGE)
+		if (codeNotify == CBN_SELCHANGE || codeNotify == CBN_DROPDOWN)
 		{
 			SetFocus(hwnd);
 			selector = FALSE;
@@ -897,7 +701,7 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 	break;
 
 		case ID_SEND :
-		{
+		{	
 			int a = recipients.size();
 			if (recipients.size() != 0)
 			{
@@ -906,20 +710,14 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			}
 			else
 			{
-				MessageBox(NULL, TEXT("Необходимо добавить хотя бы одного получателя"), TEXT("Ошибка"), MB_ICONEXCLAMATION | MB_OK);
+				MessageBox(NULL, TEXT("At least one recipient is required"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 			}
-			
 		}
 		break;
 
 		case ID_FILE :
 		{
-			files.capacity();
-
 			OPENFILENAME ofn;       
-	      
-			
-			// Initialize OPENFILENAME
 			ZeroMemory(&ofn, sizeof(ofn));
 			ofn.lStructSize = sizeof(ofn);
 			ofn.hwndOwner = hwnd;
@@ -936,35 +734,13 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			{
 				
 				HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync,(void *)&szFile, 0, NULL);
-				//WaitForSingleObject(hp, INFINITE);
 				CloseHandle(hp);
-
-				//if (OpenFileAsync(szFile) != FALSE) // открываем файл
-				//{
-				//	
-				//}
 			}
-						
-			/*WIN32_FIND_DATA fd;
-			HANDLE hFind = FindFirstFile("1.jpg", &fd);
-
-			HANDLE hFile = CreateFile(fd.cFileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-
-			ULARGE_INTEGER size = { fd.nFileSizeLow + fd.nFileSizeHigh };
-			char *buffer = new char[size.QuadPart];
-
-			ReadFile(hFile, buffer, size.QuadPart, NULL, NULL);
-	
-
-			file = base64_encode(reinterpret_cast<const unsigned char*>(buffer), size.QuadPart);
-
-			delete[] buffer;
-			CloseHandle(hFile);
-			FindClose(hFind);*/
+			ZeroMemory(&ofn, sizeof(ofn));
 		}
 		break;
 
-		case ID_ADDRCPT: //добавить  запись
+		case ID_ADDRCPT: 
 		{
 			HINSTANCE hInstance = GetWindowInstance(hwnd);
 
@@ -975,8 +751,6 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			}
 		}
 		break;
-
-
 	}//switch
 }
 
@@ -1002,10 +776,8 @@ INT_PTR CALLBACK  DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 BOOL Dialog_OnInitDialog(HWND hwnd, HWND hwndFocus, LPARAM lParam)
 {
-	//  дескриптор окна редактируемого поля
 	HWND hwndEdit = GetDlgItem(hwnd, IDC_EDIT1);
-	//  максимальная длина текста в редактируемом поле
-	Edit_LimitText(hwndEdit, _countof(szBuffer) - 1);
+	Edit_LimitText(hwndEdit, _countof(szNewReciverBuffer) - 1);
 	return TRUE;
 }
 
@@ -1013,12 +785,10 @@ void Dialog_OnClose(HWND hwnd)
 {
 	if (hwnd == hDlg)
 	{
-		// уничтожаем немодальное диалоговое окно
 		DestroyWindow(hwnd);
 	}
 	else
 	{
-		// завершаем работу модального диалогового окна
 		EndDialog(hwnd, IDCLOSE);
 	}
 }
@@ -1030,43 +800,36 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify)
 	{
 	case IDOK:
 	{
-		// получает содержимое редактируемого поля
-		int cch = GetDlgItemText(hWnd, IDC_EDIT1, szBuffer, _countof(szBuffer));
+		int cch = GetDlgItemText(hWnd, IDC_EDIT1, szNewReciverBuffer, _countof(szNewReciverBuffer));
 
 		if (0 == cch) // в редактируемого поле нет текста
 		{
-			// получает дескриптор окна редактируемого поля
 			HWND hwndEdit = GetDlgItem(hWnd, IDC_EDIT1);
 			EDITBALLOONTIP ebt = { sizeof(EDITBALLOONTIP) };
-			ebt.pszTitle = L"Пусто";
-			ebt.pszText = L"Укажите название новой записи";
+			ebt.pszTitle = L"Empty";
+			ebt.pszText = L"Input new RCPT";
 			ebt.ttiIcon = TTI_WARNING;
 			Edit_ShowBalloonTip(hwndEdit, &ebt);
 		} // if
 		else if (hWnd == hDlg)
 		{
-			// очищает редактируемое поле
 			SetDlgItemText(hWnd, IDC_EDIT1, NULL);
-			// отправляет окну-владельцу сообщение о том, что нужно добавить запись
 			SendMessage(hwnd, WM_ADDITEM, 0, 0);
 		} // if
 		else
 		{
-			// завершает работу модального диалогового окна
 			EndDialog(hWnd, IDOK);
 		} // else
 	} // if
 	break;
 
-	case IDCANCEL: // нажата кнопка "Отмена"
+	case IDCANCEL: 
 		if (hWnd == hDlg)
 		{
-			// уничтожает немодальное диалоговое окно
 			DestroyWindow(hWnd);
 		} // if
 		else
 		{
-			// завершает работу модального диалогового окна
 			EndDialog(hWnd, IDCANCEL);
 		} // else
 		break;
@@ -1076,45 +839,7 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify)
 void OnAddItem(HWND hwnd, WPARAM wParam)
 {
 	HWND hwndCtl = GetDlgItem(hwnd, ID_RECIPIENTS);
-	// добавляем новый элемент в список
-	int iItem = ComboBox_AddItemData(hwndCtl, szBuffer);
-	recipients.push_back(szBuffer);
-	// выделяем новый элемент
+	int iItem = ComboBox_AddItemData(hwndCtl, szNewReciverBuffer);
+	recipients.push_back(szNewReciverBuffer);
 	ComboBox_SetCurSel(hwndCtl, iItem);
 } // OnAddItem
-
-//MIME-Version:1.0
-//Content-Type:text/html
-//Content-Disposition:inline
-//<html>
-//<body>
-//<strong><i></i></strong>
-//</body>
-//</html>
-//
-//
-//для файлов
-//
-//Content - Type : application / octet - stream
-//Content - Transfer - Encoding : base64
-//Content - Disposition : attachment; filename = 1.jpeg;
-
-
-
-// общее
-//MIME - Version:1.0
-//Content - Type : multipart / mixed; boundary = frontier
-//
-//--frontier
-//Content - Type: text / html
-//
-//<html>
-//<body>
-//<strong><i>< / i>< / strong>
-//< / body>
-//< / html>
-//
-//--frontier
-//Content - Type : application / octet - stream
-//Content - Transfer - Encoding : base64
-//Content - Disposition : attachment; filename = 1.jpg;
