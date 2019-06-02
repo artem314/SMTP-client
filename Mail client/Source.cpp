@@ -12,7 +12,7 @@
 #include <process.h>
 #include <Commdlg.h>
 #include "shlwapi.h"
-#include <vector>
+#include <list>
 #include <winsock2.h>
 #include <iostream>
 #include "psapi.h"
@@ -52,7 +52,7 @@ TCHAR szNewReciverBuffer[256] = TEXT("");
 BOOL selector = TRUE;
 char text[512];
 
-char szFile[MAX_PATH] = { 0 };
+TCHAR szFile[MAX_PATH] = { 0 };
 
 char WarnText[256];
 char codeBuf[4];
@@ -114,14 +114,14 @@ HWND hwnd = NULL;
 BOOL bRet;
 HWND hDlg = NULL;
 
-struct FILEstruct {
+struct FileStruct {
 	char fileName[260];
 	char *fileContent;
 	LARGE_INTEGER size;
 };
 
-std::vector<FILEstruct> files;
-std::vector<std::string> recipients;
+std::list<FileStruct> files;
+std::list<std::string> recipients;
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct);
@@ -369,10 +369,6 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 	return TRUE;
 }
 
-void DrawWindow()
-{
-
-}
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	switch (uMsg)
@@ -387,20 +383,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	break;
 	case WM_DESTROY:
 	{
-		for (size_t i = 0; i < files.size(); i++)
+		for(FileStruct fs : files)
 		{
-			if (files[i].fileContent != NULL)
-				delete[] files[i].fileContent;
+			if (fs.fileContent != NULL)
+				delete fs.fileContent;
 		}
 
 		SSL_CTX_free(ctx);
 		DeleteCriticalSection(&c_section);
 		PostQuitMessage(0);
-	}
-	break;
-	case WM_PAINT:
-	{
-		DrawWindow();
 	}
 	break;
 
@@ -417,13 +408,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		{
 			if (selector)
 			{
+				std::list<std::string>::iterator it = recipients.begin();
+
 				HWND hwndCtl = GetDlgItem(hwnd, ID_RECIPIENTS);
 				int iItem = ComboBox_GetCurSel(hwndCtl);
 				if (iItem != -1)
 				{
-					recipients.erase(recipients.begin() + iItem);
+					advance(it, iItem);
+					recipients.erase(it);
 					ComboBox_DeleteString(hwndCtl, iItem);
-					if (recipients.size()!=0)
+					if (!recipients.empty())
 					{
 						ComboBox_SetCurSel(hwndCtl, recipients.size()-1);
 					}
@@ -431,15 +425,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 			}
 			else
 			{
+				std::list<FileStruct>::iterator it = files.begin();
+
 				HWND hwndCtl = GetDlgItem(hwnd, ID_FILES);
 				int iItem = ComboBox_GetCurSel(hwndCtl);
 				if (iItem != -1)
 				{
-					if(files[iItem].fileContent!=NULL)
-					delete[] files[iItem].fileContent;
-					files.erase(files.begin() + iItem);
+					advance(it, iItem);
+
+					if(*it->fileContent != NULL)
+					delete[] it->fileContent;
+					files.erase(it);
 					ComboBox_DeleteString(hwndCtl, iItem);
-					if (files.size() != 0)
+					if (!files.empty())
 					{
 						ComboBox_SetCurSel(hwndCtl, files.size() - 1);
 					}
@@ -471,11 +469,8 @@ std::string EncodeField(HWND hwndctl, const std::string &param)
 	
 	length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), &texto[0], texto.length(), nullptr, nullptr);
 	texto.resize(length + 1);
-
-	return "%s:=?UTF-8?b?" + base64_encode(reinterpret_cast<const unsigned char*>(texto.c_str()), texto.length()) + "?=";
-
-	//std::string Field = base64_encode(reinterpret_cast<const unsigned char*>(textto), length + 1);
-	//StringCchPrintfA(text, _countof(text), "%s:=?UTF-8?b?%s?=\r\n", param.c_str(), Field.c_str());
+	texto = texto;
+	return param + ":=?UTF-8?b?" + base64_encode(reinterpret_cast<const unsigned char*>(texto.c_str()), texto.length()) + "?=";
 }
 
 unsigned _stdcall SendMail(void *lpparameter)
@@ -526,25 +521,34 @@ unsigned _stdcall SendMail(void *lpparameter)
 	read_SSLsocket(ssl);
 
 	int wrongRcpt = 0;
-	for (size_t i = 0; i < recipients.size(); i++)
+	std::string To = "TO:";
+	int i = 1;
+	for (std::string rcpt : recipients)
 	{
-		StringCchPrintfA(text, _countof(text), "RCPT TO: <%s>\r\n", recipients[i].c_str());
+		StringCchPrintfA(text, _countof(text), "RCPT TO: <%s>\r\n", rcpt.c_str());
 		send_SSLsocket(ssl, text);
 		read_SSLsocket(ssl);
 
-		if (strcmp(codeBuf, "553")==0)
+		if (strcmp(codeBuf, "553") == 0)
 		{
 			wrongRcpt++;
-			StringCchPrintfA(text, _countof(text), "Wrong email address: %s", recipients[i].c_str());
+			StringCchPrintfA(text, _countof(text), "Wrong email address: %s", rcpt.c_str());
 			MessageBox(NULL, text, "RCPT Error", MB_ICONEXCLAMATION | MB_OK);
-			
+
 			if (recipients.size() == wrongRcpt)
 			{
 				send_SSLsocket(ssl, "QUIT\r\n");
 				return -1;
 			}
 		}
+		else
+		{
+				To += rcpt + ",";
+		}
+			
 	}
+
+	To.erase(To.length() - 1, 1);
 
 	send_SSLsocket(ssl, "DATA\r\n");
 	read_SSLsocket(ssl);
@@ -552,12 +556,17 @@ unsigned _stdcall SendMail(void *lpparameter)
 	if (strcmp(codeBuf,"354") == 0)
 	{
 		HWND hwndctl = GetDlgItem(hwnd, ID_FROM);
-		EncodeField(hwndctl, "FROM");
-		send_SSLsocket(ssl, text);
+		std::string from = EncodeField(hwndctl, "FROM");
+		from +="\r\n";
+		send_SSLsocket(ssl, from.c_str());
+
+		To += "\r\n";
+		send_SSLsocket(ssl, To.c_str());
 
 		hwndctl = GetDlgItem(hwnd, ID_SUBJECT);
-		EncodeField(hwndctl, "SUBJECT");
-		send_SSLsocket(ssl, text);
+		std::string subject = EncodeField(hwndctl, "SUBJECT");
+		subject+="\r\n";
+		send_SSLsocket(ssl, subject.c_str());
 
 		int length = 0;
 		LPSTR LpMessage ;
@@ -567,21 +576,21 @@ unsigned _stdcall SendMail(void *lpparameter)
 		LpMessage = (LPSTR)malloc(length + 1);
 		SendMessageA(hwndctl, WM_GETTEXT, length + 1, (LPARAM)(LpMessage));
 
-		if (files.size() != 0)
+		if (!files.empty())
 		{
 			std::string MIMEHEADER = "MIME-Version: 1.0\r\nContent-Type:multipart/mixed;boundary=frontier\r\n\r\n";
 			MIMEHEADER += "--frontier\r\nContent-Disposition:inline\r\nContent-Type:text/plain\r\r\n\r\n";
 			send_SSLsocket(ssl, MIMEHEADER.c_str());
 			send_SSLsocket(ssl, LpMessage); 
 
-			for (size_t i = 0; i < files.size(); i++)
+			for (FileStruct file : files)
 			{
 				send_SSLsocket(ssl, "\r\n\r\n--frontier\r\n");
-				std::string MIMEFILE = "Content-Type:application/octet-stream;\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename=";
-				MIMEFILE += files[i].fileName; 
+				std::string MIMEFILE = "Content-Type:application/octet-stream;\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename*=UTF-8''";
+				MIMEFILE += file.fileName;
 				MIMEFILE += ";\r\n\r\n";
 				send_SSLsocket(ssl, MIMEFILE.c_str());
-				std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(files[i].fileContent), files[i].size.QuadPart);
+				std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(file.fileContent), file.size.QuadPart);
 				send_SSLsocket(ssl, filetosend.c_str());
 			}
 			send_SSLsocket(ssl, "\r\n--frontier--");
@@ -602,7 +611,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 		else
 			MessageBox(NULL, "Failure", "Error", MB_ICONEXCLAMATION | MB_OK);
 
-	//send_SSLsocket(ssl, "QUIT\r\n");
+			send_SSLsocket(ssl, "QUIT\r\n");
 	}
 	else
 	{
@@ -617,11 +626,11 @@ unsigned _stdcall SendMail(void *lpparameter)
 
 unsigned _stdcall LoadFileAsync(void *lpparameter)
 {
-	char *filename = (char *)lpparameter;
+	TCHAR *filename = (TCHAR *)lpparameter;
 
-	FILEstruct file = { 0 };
+	FileStruct file = { 0 };
 
-	HANDLE hExistingFile = CreateFile((char*)filename, GENERIC_READ, FILE_SHARE_READ| FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE hExistingFile = CreateFile((TCHAR *)filename, GENERIC_READ, FILE_SHARE_READ| FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
 
 	if (INVALID_HANDLE_VALUE == hExistingFile) 
 	{
@@ -645,19 +654,44 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 
 			ULARGE_INTEGER u_size = { 0 };
 
-			for (size_t i = 0; i < files.size(); i++)
+			for (FileStruct file : files)
 			{
-				u_size.QuadPart += files[i].size.QuadPart;
+				u_size.QuadPart += file.size.QuadPart;
 			}
 
 			if (u_size.QuadPart + size.QuadPart >= 0x2000000ULL)
 			{
 				MessageBox(NULL, TEXT("Files size too large\ntotal file size should be less than 20 Mb"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
+				delete[] file.fileContent;
 				return 0;
 			}
 
 			PathStripPath(filename);
-			StringCchCopyA(file.fileName, _countof(file.fileName), filename);
+
+			//из ANSI в UNICODE
+			int length = strlen(filename)+1;
+				length = MultiByteToWideChar(CP_ACP, 0, filename, length, nullptr, 0);
+
+				std::wstring message;
+				message.resize(length);
+
+				length = MultiByteToWideChar(CP_ACP, 0, filename, length, &message[0], message.length());
+				message.resize(length + 1);
+
+			//из юникода в UTF-8
+			length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), nullptr, 0, nullptr, nullptr);
+
+			std::string texto;
+			texto.resize(length + 1);
+
+			length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), &texto[0], texto.length(), nullptr, nullptr);
+			texto.resize(length + 1);
+			//из юникода в UTF-8
+	
+			StringCchCopyA(file.fileName, texto.length(), texto.c_str());
+		
+
+
 			file.size = size;
 			EnterCriticalSection(&c_section);
 			files.push_back(file);
@@ -717,8 +751,7 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 
 		case ID_FILE :
 		{
-			OPENFILENAME ofn;       
-			ZeroMemory(&ofn, sizeof(ofn));
+			OPENFILENAME ofn = { sizeof(OPENFILENAME) };
 			ofn.lStructSize = sizeof(ofn);
 			ofn.hwndOwner = hwnd;
 			ofn.lpstrFile = szFile;
@@ -732,11 +765,12 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 
 			if (GetOpenFileName(&ofn) != FALSE)
 			{
-				
 				HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync,(void *)&szFile, 0, NULL);
 				CloseHandle(hp);
 			}
+
 			ZeroMemory(&ofn, sizeof(ofn));
+			
 		}
 		break;
 
