@@ -138,11 +138,11 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify);
 void OnAddItem(HWND hwnd, WPARAM wParam);
 
 int create_socket(int port, const char *hostname) {
-	int sockfd=0;
+	int sockfd = 0;
 	struct hostent *host;
 	struct sockaddr_in dest_addr;
 
-	if ((host = gethostbyname(hostname)) == NULL) 
+	if ((host = gethostbyname(hostname)) == NULL)
 	{
 		MessageBox(NULL, TEXT("Cannot resolve hostname\n(Problem with Internet Connection)"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
@@ -154,7 +154,7 @@ int create_socket(int port, const char *hostname) {
 	memset(&(dest_addr.sin_zero), '\0', 8);
 
 	if (connect(sockfd, (struct sockaddr *) &dest_addr,
-		sizeof(struct sockaddr)) == -1) 
+		sizeof(struct sockaddr)) == -1)
 	{
 		StringCchPrintfA(WarnText, _countof(WarnText), "Cannot connect to host %s:%s", hostname, port);
 		MessageBox(NULL, WarnText, TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
@@ -162,7 +162,7 @@ int create_socket(int port, const char *hostname) {
 	}
 	return sockfd;
 }
-int send_SSLsocket(SSL *ssl,const char *buf)
+int send_SSLsocket(SSL *ssl, const char *buf)
 {
 	int all = strlen(buf);
 
@@ -178,13 +178,13 @@ int send_SSLsocket(SSL *ssl,const char *buf)
 	return all;
 }
 
-bool checkstr(const char *buf,int len)
+bool checkstr(const char *buf, int len)
 {
 	if (len > 2 && buf[len - 1] == '\n' && buf[len - 2] == '\r')
 	{
 		for (size_t i = len - 3; i > 0; i--)
 		{
-			if (isdigit(static_cast<unsigned char>(buf[i])) && (buf[i-3] == '\n' || i - 3== -1))
+			if (isdigit(static_cast<unsigned char>(buf[i])) && (buf[i - 3] == '\n' || i - 3 == -1))
 			{
 				if (buf[i + 1] == ' ')
 					return true;
@@ -234,7 +234,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 		MessageBox(NULL, TEXT("WinSock Lib initialization failed"), NULL, MB_OK | MB_ICONERROR);
 		return -1;
 	}
-	
+
 	setlocale(LC_ALL, "");
 
 	WNDCLASSEX wcex;
@@ -279,7 +279,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR lpszCmdLine, int nCm
 		MessageBox(NULL, TEXT("Could not initialize the OpenSSL library"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		return -1;
 	}
-		
+
 	const SSL_METHOD *method = TLSv1_2_client_method();
 
 	if ((ctx = SSL_CTX_new(method)) == NULL)
@@ -324,30 +324,30 @@ BOOL OnCreate(HWND hwnd, LPCREATESTRUCT lpCreateStruct)
 		WS_CHILD | WS_VISIBLE, 10, 10, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
 
 	CreateWindowEx(0, TEXT("Edit"), TEXT("Sender"),
-		WS_CHILD | WS_VISIBLE  |
-		ES_LEFT  |   WS_BORDER  , 20, 40, width - 70, 30, hwnd, (HMENU)ID_FROM, lpCreateStruct->hInstance, NULL);
+		WS_CHILD | WS_VISIBLE |
+		ES_LEFT | WS_BORDER, 20, 40, width - 70, 30, hwnd, (HMENU)ID_FROM, lpCreateStruct->hInstance, NULL);
 
 	CreateWindowEx(0, TEXT("Static"), TEXT("TO:"),
 		WS_CHILD | WS_VISIBLE, 10, 80, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
 
 	HWND cbmbx = CreateWindowEx(0, TEXT("COMBOBOX"), TEXT("RECIPIENTS"),
-		WS_CHILD | WS_VISIBLE  | WS_VSCROLL | CBS_DROPDOWNLIST , 20, 110, width /2 , 200,
+		WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST, 20, 110, width / 2, 200,
 		hwnd, (HMENU)ID_RECIPIENTS, lpCreateStruct->hInstance, NULL);
 
 	CreateWindowEx(0, TEXT("Button"), TEXT("Add Recipient"),
-		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 110, width /3, 30,
+		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, width / 2 + 40, 110, width / 3, 30,
 		hwnd, (HMENU)ID_ADDRCPT, lpCreateStruct->hInstance, NULL);
-	
+
 	CreateWindowEx(0, TEXT("Static"), TEXT("SUBJECT:"),
 		WS_CHILD | WS_VISIBLE, 10, 150, 100, 20, hwnd, (HMENU)IDC_STATIC, NULL, NULL);
 
 	CreateWindowEx(0, TEXT("Edit"), TEXT("Subject"),
-		WS_CHILD | WS_VISIBLE |  
-		ES_LEFT  | WS_BORDER, 20, 180, width - 70, 30, hwnd, (HMENU)ID_SUBJECT, lpCreateStruct->hInstance, NULL);
+		WS_CHILD | WS_VISIBLE |
+		ES_LEFT | WS_BORDER, 20, 180, width - 70, 30, hwnd, (HMENU)ID_SUBJECT, lpCreateStruct->hInstance, NULL);
 
 	CreateWindowEx(0, TEXT("Edit"), TEXT("Text...\r\n\r\n\r\n\r\nSent From Mail Client"),
 		WS_CHILD | WS_VISIBLE | WS_VSCROLL |
-		ES_LEFT  | ES_MULTILINE | ES_AUTOVSCROLL | WS_BORDER, 20, 220, width - 40, 200, hwnd, (HMENU)ID_DATA, lpCreateStruct->hInstance, NULL);
+		ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | WS_BORDER, 20, 220, width - 40, 200, hwnd, (HMENU)ID_DATA, lpCreateStruct->hInstance, NULL);
 
 	CreateWindowEx(0, TEXT("Button"), TEXT("Send"),
 		WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON, 20, 440, width / 2, 40,
@@ -383,7 +383,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	break;
 	case WM_DESTROY:
 	{
-		for(FileStruct fs : files)
+		for (FileStruct fs : files)
 		{
 			if (fs.fileContent != NULL)
 				delete fs.fileContent;
@@ -419,7 +419,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					ComboBox_DeleteString(hwndCtl, iItem);
 					if (!recipients.empty())
 					{
-						ComboBox_SetCurSel(hwndCtl, recipients.size()-1);
+						ComboBox_SetCurSel(hwndCtl, recipients.size() - 1);
 					}
 				} // if
 			}
@@ -433,8 +433,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 				{
 					advance(it, iItem);
 
-					if(*it->fileContent != NULL)
-					delete[] it->fileContent;
+					if (*it->fileContent != NULL)
+						delete[] it->fileContent;
 					files.erase(it);
 					ComboBox_DeleteString(hwndCtl, iItem);
 					if (!files.empty())
@@ -443,7 +443,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 					}
 				} // if
 			}
-			
+
 			InvalidateRect(hwnd, NULL, TRUE);
 			UpdateWindow(hwnd);
 		}
@@ -466,7 +466,7 @@ std::string EncodeField(HWND hwndctl, const std::string &param)
 
 	std::string texto;
 	texto.resize(length + 1);
-	
+
 	length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), &texto[0], texto.length(), nullptr, nullptr);
 	texto.resize(length + 1);
 	texto = texto;
@@ -475,7 +475,7 @@ std::string EncodeField(HWND hwndctl, const std::string &param)
 
 unsigned _stdcall SendMail(void *lpparameter)
 {
-	SSL *ssl; 
+	SSL *ssl;
 	ssl = SSL_new(ctx);
 
 	int sock = create_socket(465, hostname);
@@ -493,7 +493,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 	}
 
 	read_SSLsocket(ssl);
-	send_SSLsocket(ssl,"EHLO smtpclient\r\n");
+	send_SSLsocket(ssl, "EHLO smtpclient\r\n");
 	read_SSLsocket(ssl);
 
 	send_SSLsocket(ssl, "AUTH LOGIN\r\n");
@@ -543,21 +543,21 @@ unsigned _stdcall SendMail(void *lpparameter)
 		}
 		else
 		{
-				To += rcpt + ",";
+			To += rcpt + ",";
 		}
-			
+
 	}
 
 	To.erase(To.length() - 1, 1);
 
 	send_SSLsocket(ssl, "DATA\r\n");
 	read_SSLsocket(ssl);
-	
-	if (strcmp(codeBuf,"354") == 0)
+
+	if (strcmp(codeBuf, "354") == 0)
 	{
 		HWND hwndctl = GetDlgItem(hwnd, ID_FROM);
 		std::string from = EncodeField(hwndctl, "FROM");
-		from +="\r\n";
+		from += "\r\n";
 		send_SSLsocket(ssl, from.c_str());
 
 		To += "\r\n";
@@ -565,11 +565,11 @@ unsigned _stdcall SendMail(void *lpparameter)
 
 		hwndctl = GetDlgItem(hwnd, ID_SUBJECT);
 		std::string subject = EncodeField(hwndctl, "SUBJECT");
-		subject+="\r\n";
+		subject += "\r\n";
 		send_SSLsocket(ssl, subject.c_str());
 
 		int length = 0;
-		LPSTR LpMessage ;
+		LPSTR LpMessage;
 
 		hwndctl = GetDlgItem(hwnd, ID_DATA);
 		length = SendMessageA(hwndctl, WM_GETTEXTLENGTH, 0, 0);
@@ -581,14 +581,14 @@ unsigned _stdcall SendMail(void *lpparameter)
 			std::string MIMEHEADER = "MIME-Version: 1.0\r\nContent-Type:multipart/mixed;boundary=frontier\r\n\r\n";
 			MIMEHEADER += "--frontier\r\nContent-Disposition:inline\r\nContent-Type:text/plain\r\r\n\r\n";
 			send_SSLsocket(ssl, MIMEHEADER.c_str());
-			send_SSLsocket(ssl, LpMessage); 
+			send_SSLsocket(ssl, LpMessage);
 
 			for (FileStruct file : files)
 			{
 				send_SSLsocket(ssl, "\r\n\r\n--frontier\r\n");
-				std::string MIMEFILE = "Content-Type:application/octet-stream;\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename*=UTF-8''";
-				MIMEFILE += file.fileName;
-				MIMEFILE += ";\r\n\r\n";
+				std::string MIMEFILE = "Content-Type:application/octet-stream;\r\nContent-Transfer-Encoding:base64\r\nContent-Disposition:attachment;filename=\"";
+				MIMEFILE+= file.fileName;
+				MIMEFILE += "\";\r\n\r\n";
 				send_SSLsocket(ssl, MIMEFILE.c_str());
 				std::string filetosend = base64_encode(reinterpret_cast<const unsigned char*>(file.fileContent), file.size.QuadPart);
 				send_SSLsocket(ssl, filetosend.c_str());
@@ -599,7 +599,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 		{
 			std::string MIMEHEADER = "MIME-Version:1.0\r\nContent-Type:text/plain\r\nContent-Disposition:inline\r\n";
 			send_SSLsocket(ssl, MIMEHEADER.c_str());
-			send_SSLsocket(ssl, LpMessage); 
+			send_SSLsocket(ssl, LpMessage);
 		}
 
 		send_SSLsocket(ssl, "\r\n.\r\n");
@@ -611,7 +611,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 		else
 			MessageBox(NULL, "Failure", "Error", MB_ICONEXCLAMATION | MB_OK);
 
-			send_SSLsocket(ssl, "QUIT\r\n");
+		send_SSLsocket(ssl, "QUIT\r\n");
 	}
 	else
 	{
@@ -620,7 +620,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 	}
 
 	closesocket(sock);
-	SSL_shutdown(ssl);	
+	SSL_shutdown(ssl);
 	return 0;
 }
 
@@ -630,9 +630,9 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 
 	FileStruct file = { 0 };
 
-	HANDLE hExistingFile = CreateFile((TCHAR *)filename, GENERIC_READ, FILE_SHARE_READ| FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	HANDLE hExistingFile = CreateFile((TCHAR *)filename, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
 
-	if (INVALID_HANDLE_VALUE == hExistingFile) 
+	if (INVALID_HANDLE_VALUE == hExistingFile)
 	{
 		return FALSE;
 	} // if
@@ -668,17 +668,15 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 
 			PathStripPath(filename);
 
-			//из ANSI в UNICODE
-			int length = strlen(filename)+1;
-				length = MultiByteToWideChar(CP_ACP, 0, filename, length, nullptr, 0);
+			int length = strlen(filename) + 1;
+			length = MultiByteToWideChar(CP_ACP, 0, filename, length, nullptr, 0);
 
-				std::wstring message;
-				message.resize(length);
+			std::wstring message;
+			message.resize(length);
 
-				length = MultiByteToWideChar(CP_ACP, 0, filename, length, &message[0], message.length());
-				message.resize(length + 1);
+			length = MultiByteToWideChar(CP_ACP, 0, filename, length, &message[0], message.length());
+			message.resize(length + 1);
 
-			//из юникода в UTF-8
 			length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), nullptr, 0, nullptr, nullptr);
 
 			std::string texto;
@@ -686,11 +684,8 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 
 			length = WideCharToMultiByte(CP_UTF8, 0, message.c_str(), message.length(), &texto[0], texto.length(), nullptr, nullptr);
 			texto.resize(length + 1);
-			//из юникода в UTF-8
-	
-			StringCchCopyA(file.fileName, texto.length(), texto.c_str());
-		
 
+			StringCchCopyA(file.fileName, texto.length(), texto.c_str());
 
 			file.size = size;
 			EnterCriticalSection(&c_section);
@@ -701,7 +696,7 @@ unsigned _stdcall LoadFileAsync(void *lpparameter)
 			ComboBox_SetCurSel(hwndCtl, iItem);
 			LeaveCriticalSection(&c_section);
 		}
-		
+
 	} // if
 
 	CloseHandle(hExistingFile);
@@ -720,7 +715,7 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 			SetFocus(hwnd);
 			selector = TRUE;
 		}
-		
+
 	}
 	break;
 
@@ -734,57 +729,57 @@ void OnCommand(HWND hwnd, int id, HWND hwndCtl, UINT codeNotify)
 	}
 	break;
 
-		case ID_SEND :
-		{	
-			int a = recipients.size();
-			if (recipients.size() != 0)
-			{
-				HANDLE sendThread = (HANDLE)_beginthreadex(NULL, 0, SendMail, NULL, 0, NULL);
-				CloseHandle(sendThread);
-			}
-			else
-			{
-				MessageBox(NULL, TEXT("At least one recipient is required"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
-			}
-		}
-		break;
-
-		case ID_FILE :
+	case ID_SEND:
+	{
+		int a = recipients.size();
+		if (recipients.size() != 0)
 		{
-			OPENFILENAME ofn = { sizeof(OPENFILENAME) };
-			ofn.lStructSize = sizeof(ofn);
-			ofn.hwndOwner = hwnd;
-			ofn.lpstrFile = szFile;
-			ofn.nMaxFile = sizeof(szFile);
-			ofn.lpstrFilter = _T("All\0");
-			ofn.nFilterIndex = 1;
-			ofn.lpstrFileTitle = NULL;
-			ofn.nMaxFileTitle = 0;
-			ofn.lpstrInitialDir = NULL;
-			ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-
-			if (GetOpenFileName(&ofn) != FALSE)
-			{
-				HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync,(void *)&szFile, 0, NULL);
-				CloseHandle(hp);
-			}
-
-			ZeroMemory(&ofn, sizeof(ofn));
-			
+			HANDLE sendThread = (HANDLE)_beginthreadex(NULL, 0, SendMail, NULL, 0, NULL);
+			CloseHandle(sendThread);
 		}
-		break;
-
-		case ID_ADDRCPT: 
+		else
 		{
-			HINSTANCE hInstance = GetWindowInstance(hwnd);
-
-			int nDlgResult = DialogBox(hInstance, MAKEINTRESOURCE(IDD_DIALOG1), hwnd, DialogProc);
-			if (IDOK == nDlgResult)
-			{
-				SendMessage(hwnd, WM_ADDITEM, 0, 0);
-			}
+			MessageBox(NULL, TEXT("At least one recipient is required"), TEXT("Error"), MB_ICONEXCLAMATION | MB_OK);
 		}
-		break;
+	}
+	break;
+
+	case ID_FILE:
+	{
+		OPENFILENAME ofn = { sizeof(OPENFILENAME) };
+		ofn.lStructSize = sizeof(ofn);
+		ofn.hwndOwner = hwnd;
+		ofn.lpstrFile = szFile;
+		ofn.nMaxFile = sizeof(szFile);
+		ofn.lpstrFilter = _T("All\0");
+		ofn.nFilterIndex = 1;
+		ofn.lpstrFileTitle = NULL;
+		ofn.nMaxFileTitle = 0;
+		ofn.lpstrInitialDir = NULL;
+		ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+		if (GetOpenFileName(&ofn) != FALSE)
+		{
+			HANDLE hp = (HANDLE)_beginthreadex(NULL, 0, LoadFileAsync, (void *)&szFile, 0, NULL);
+			CloseHandle(hp);
+		}
+
+		ZeroMemory(&ofn, sizeof(ofn));
+
+	}
+	break;
+
+	case ID_ADDRCPT:
+	{
+		HINSTANCE hInstance = GetWindowInstance(hwnd);
+
+		int nDlgResult = DialogBox(hInstance, MAKEINTRESOURCE(IDD_DIALOG1), hwnd, DialogProc);
+		if (IDOK == nDlgResult)
+		{
+			SendMessage(hwnd, WM_ADDITEM, 0, 0);
+		}
+	}
+	break;
 	}//switch
 }
 
@@ -857,7 +852,7 @@ void Dialog_OnCommand(HWND hWnd, int id, HWND hwndCtl, UINT codeNotify)
 	} // if
 	break;
 
-	case IDCANCEL: 
+	case IDCANCEL:
 		if (hWnd == hDlg)
 		{
 			DestroyWindow(hWnd);
