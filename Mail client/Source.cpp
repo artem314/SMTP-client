@@ -499,14 +499,14 @@ unsigned _stdcall SendMail(void *lpparameter)
 	send_SSLsocket(ssl, "AUTH LOGIN\r\n");
 	read_SSLsocket(ssl);
 
-	std::string login64 = "artem3331114@gmail.com";
+	std::string login64 = "";
 
 	login64 = base64_encode(reinterpret_cast<const unsigned char*>(login64.c_str()), login64.length());
 	login64 = login64 + "\r\n";
 	send_SSLsocket(ssl, login64.c_str());
 	read_SSLsocket(ssl);
 
-	std::string pass64 = "smjgzicjouudmlka";
+	std::string pass64 = "";
 
 	pass64 = base64_encode(reinterpret_cast<const unsigned char*>(pass64.c_str()), pass64.length());
 	pass64 = pass64 + "\r\n";
@@ -514,7 +514,7 @@ unsigned _stdcall SendMail(void *lpparameter)
 	send_SSLsocket(ssl, pass64.c_str());
 	read_SSLsocket(ssl);
 
-	std::string from = "artem_pochta_314@mail.ru";
+	std::string from = "";
 	from = base64_encode(reinterpret_cast<const unsigned char*>(from.c_str()), from.length());
 	from = "MAIL FROM: <" + from + ">\r\n";
 	send_SSLsocket(ssl, from.c_str());
