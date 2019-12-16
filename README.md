@@ -4,7 +4,7 @@ KeyFeatues:
   Many Recepients ( < 100)
   Can send Files
   async work
-  sendint with TLS
+  TLS
 
   add openSSL dependencies first: 
   ssleay32.lib
